@@ -1,7 +1,8 @@
 ﻿using DotnetCompilerBot.Exceptions;
 using DotnetCompilerBot.Extensions;
+using DotnetCompilerBot.Models;
 using DotnetCompilerBot.Services;
-using System.Text;
+using System.Reflection;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -37,7 +38,9 @@ public class UpdateHandler
 
     public async Task HandleCommandAsync(Message message)
     {
-        if (message is null || message.Text is null)
+        if (message is null ||
+            message.Type is not MessageType.Text ||
+            message.Text is null)
         {
             return;
         }
@@ -79,39 +82,72 @@ public class UpdateHandler
         {
             byte[] compiledCode = this.compilerService.Compile(sourceCode);
             string result = this.compilerService.Execute(compiledCode);
-            StringBuilder messageTemplate = new StringBuilder();
+            string messageText = FormatResultMessage(result);
 
-            messageTemplate.AppendLine(MessageTemplate.GetDecoratedMessage(
-                message: "Result:",
-                decoraterType: Models.DecoraterType.Bold));
-
-            messageTemplate.AppendLine(MessageTemplate.GetDecoratedMessage(
-                message: result,
-                decoraterType: Models.DecoraterType.Monospace));
-
-            await this.telegramBotClient.SendTextMessageAsync(
-                chatId: message.From.Id,
-                text: messageTemplate.ToString(),
-                parseMode: ParseMode.Html);
+            await SendMessageAsync(message.From.Id, messageText);
         }
         catch (CompileFailedException compileFailedException)
         {
-            await this.telegramBotClient.SendTextMessageAsync(
-                chatId: message.From.Id,
-                text: compileFailedException.Message,
-                parseMode: ParseMode.Html);
+            string errorMessage = compileFailedException.Message;
+            await SendMessageAsync(message.From.Id, errorMessage);
+        }
+        catch (TargetInvocationException targetInvocationException)
+        {
+            if (targetInvocationException.InnerException is Exception innerException)
+            {
+                string errorMessage = FormatExceptionMessage(innerException);
+                await SendMessageAsync(message.From.Id, errorMessage);
+            }
         }
     }
 
     private async Task HandleNotAvailableCommandAsync(Message message)
     {
-        string messageTemplate = MessageTemplate.GetDecoratedMessage(
-            message: @"Not available command provided.",
-            decoraterType: Models.DecoraterType.Bold);
+        string notAvailableCommandMessage = FormatNotAvailableCommanMessage();
 
-        await this.telegramBotClient.SendTextMessageAsync(
-            chatId: message.From.Id,
-            text: messageTemplate,
+        await SendMessageAsync(message.From.Id, notAvailableCommandMessage);
+    }
+
+    private async Task SendMessageAsync(
+        ChatId chatId,
+        string message)
+    {
+        await telegramBotClient.SendTextMessageAsync(
+            chatId: chatId,
+            text: message,
             parseMode: ParseMode.Html);
+    }
+
+    private static string FormatNotAvailableCommanMessage()
+    {
+        return MessageTemplate.GetDecoratedMessage(
+            message: "Not available command provided.",
+            decoraterType: Models.DecoraterType.Bold);
+    }
+
+    private string FormatResultMessage(string result)
+    {
+        string formatMessage = MessageTemplate.GetDecoratedMessage(
+            message: "Result:\n",
+            decoraterType: DecoraterType.Bold);
+
+        formatMessage += MessageTemplate.GetDecoratedMessage(
+            message: result,
+            decoraterType: DecoraterType.Monospace);
+
+        return formatMessage;
+    }
+
+    private string FormatExceptionMessage(Exception exception)
+    {
+        string formatMessage = MessageTemplate.GetDecoratedMessage(
+            message: "Unhandled runtime exception:\n",
+            decoraterType: DecoraterType.Bold);
+
+        formatMessage += MessageTemplate.GetDecoratedMessage(
+            message: exception.Message,
+            decoraterType: DecoraterType.Monospace);
+
+        return formatMessage;
     }
 }
