@@ -21,18 +21,19 @@ public class Program
         app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
         app.MapControllers();
         
-        //SetWebHook(app);
+        SetWebHook(app, builder.Configuration);
         
         app.Run();
     }
 
     private static void SetWebHook(
-            IApplicationBuilder app)
+            IApplicationBuilder app,
+            IConfiguration configuration)
     {
         using (var scope = app.ApplicationServices.CreateScope())
         {
             var botClient = scope.ServiceProvider.GetRequiredService<ITelegramBotClient>();
-            var baseUrl = Environment.GetEnvironmentVariable("BASE_ADDRESS");
+            var baseUrl = configuration.GetSection("BotConfig:Host").Value;
             var webhookUrl = $"{baseUrl}/bot";
             var webhookInfo = botClient.GetWebhookInfoAsync().Result;
 
