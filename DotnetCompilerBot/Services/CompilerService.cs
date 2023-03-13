@@ -1,4 +1,6 @@
 ﻿using DotnetCompilerBot.Exceptions;
+using DotnetCompilerBot.Extensions;
+using DotnetCompilerBot.Models;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
@@ -21,7 +23,10 @@ public class CompilerService : ICompilerService
         if (result.Success is false)
         {
             StringBuilder message = new StringBuilder();
-            message.AppendLine("<b>Compilation done with errors:</b>");
+            
+            message.AppendLine(MessageTemplate.GetDecoratedMessage(
+                message: "Compilation done with errors:",
+                decoraterType: DecoraterType.Bold));
 
             var failures = result
                 .Diagnostics
@@ -30,7 +35,18 @@ public class CompilerService : ICompilerService
 
             foreach (var diagnostic in failures)
             {
-                message.AppendLine($"{diagnostic.Id}: {diagnostic.GetMessage()}");
+                string diagnosticMessage = diagnostic
+                    .GetMessage()
+                    .Replace("<", "&lt;")
+                    .Replace(">", "&gt;");
+
+                string diagnosticId = diagnostic.Id;
+
+                message.AppendLine(MessageTemplate.GetDecoratedMessage(
+                    message: $"{diagnosticId}: {diagnosticMessage}",
+                    decoraterType: DecoraterType.Monospace));
+
+                message.AppendLine();
             }
 
             throw new CompileFailedException(message.ToString());
@@ -68,7 +84,8 @@ public class CompilerService : ICompilerService
         return CSharpCompilation.Create("HelloWorld.dll",
             new[] { parsedSyntaxTree },
             references: references,
-            options: new CSharpCompilationOptions(OutputKind.ConsoleApplication,
+            options: new CSharpCompilationOptions(
+                OutputKind.ConsoleApplication,
                 optimizationLevel: OptimizationLevel.Release,
                 assemblyIdentityComparer: DesktopAssemblyIdentityComparer.Default));
     }
@@ -105,7 +122,11 @@ public class CompilerService : ICompilerService
             var originalConsoleOut = Console.Out;
             Console.SetOut(streamWriter);
 
-            if(entry is not null)
+            if(entry is not null && entry.GetParameters().Length > 0)
+            {
+                entry.Invoke(null, new object[] { Array.Empty<string>() });
+            }
+            else
             {
                 entry.Invoke(null, null);
             }
