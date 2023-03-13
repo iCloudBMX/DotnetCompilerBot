@@ -33,7 +33,7 @@ public class Program
         using (var scope = app.ApplicationServices.CreateScope())
         {
             var botClient = scope.ServiceProvider.GetRequiredService<ITelegramBotClient>();
-            var baseUrl = configuration.GetSection("BotConfig:Host").Value;
+            var baseUrl = Environment.GetEnvironmentVariable("BASE_ADDRESS");
             var webhookUrl = $"{baseUrl}/bot";
             var webhookInfo = botClient.GetWebhookInfoAsync().Result;
 

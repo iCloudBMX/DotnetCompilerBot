@@ -11,7 +11,7 @@ public static class ServiceCollectionExtensions
         IConfiguration configuration)
     {
 
-        string botApiKey = configuration.GetSection("BotConfig:Token").Value;
+        string botApiKey = Environment.GetEnvironmentVariable("BOT_TOKEN");
        
         services.AddSingleton<ITelegramBotClient, TelegramBotClient>(
             x => new TelegramBotClient(botApiKey));
