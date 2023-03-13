@@ -109,34 +109,37 @@ public class CompilerService : ICompilerService
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static WeakReference LoadAndExecute(byte[] compiledAssembly, out string output)
     {
-        using (var memoryStream = new MemoryStream(compiledAssembly))
+        using var memoryStream = new MemoryStream(compiledAssembly);
+        var assemblyLoadContext = new SimpleUnloadableAssemblyLoadContext();
+        var assembly = assemblyLoadContext.LoadFromStream(memoryStream);
+        var entry = assembly.EntryPoint;
+        using var outputStream = new MemoryStream();
+        using var streamWriter = new StreamWriter(outputStream);
+        streamWriter.AutoFlush = true;
+        var originalConsoleOut = Console.Out;
+
+        try
         {
-            var assemblyLoadContext = new SimpleUnloadableAssemblyLoadContext();
-            var assembly = assemblyLoadContext.LoadFromStream(memoryStream);
-            var entry = assembly.EntryPoint;
-
-            using var outputStream = new MemoryStream();
-            using var streamWriter = new StreamWriter(outputStream);
-            streamWriter.AutoFlush = true;
-
-            var originalConsoleOut = Console.Out;
             Console.SetOut(streamWriter);
 
-            if(entry is not null && entry.GetParameters().Length > 0)
+            if(entry is not null)
             {
-                entry.Invoke(null, new object[] { Array.Empty<string>() });
+                var args = entry.GetParameters().Length > 0 ? 
+                    new object[] { Array.Empty<string>() } :
+                    default;
+                
+                entry.Invoke(null, args);
             }
-            else
-            {
-                entry.Invoke(null, null);
-            }
-
-            Console.SetOut(originalConsoleOut);
-            output = Encoding.UTF8.GetString(outputStream.ToArray());
-            assemblyLoadContext.Unload();
-
-            return new WeakReference(assemblyLoadContext);
         }
+        finally
+        {
+            Console.SetOut(originalConsoleOut);
+        }
+
+        output = Encoding.UTF8.GetString(outputStream.ToArray());
+        assemblyLoadContext.Unload();
+
+        return new WeakReference(assemblyLoadContext);
     }
     #endregion
 }
