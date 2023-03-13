@@ -1,5 +1,7 @@
 ﻿using DotnetCompilerBot.Exceptions;
+using DotnetCompilerBot.Extensions;
 using DotnetCompilerBot.Services;
+using System.Text;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -45,7 +47,12 @@ public class UpdateHandler
             return;
         }
 
-        var command = message.Text.Split(' ').First().Substring(1);
+        char[] seperators = new char[] { ' ', '\n' };
+
+        var command = message.Text
+            .Split(seperators)
+            .FirstOrDefault()
+            ?.Substring(1);
 
         var task = command switch
         {
@@ -58,32 +65,53 @@ public class UpdateHandler
 
     private async Task HandleRunCommandAsync(Message message)
     {
+        string command = "/run";
+
         string sourceCode = message.Text
-            .Substring(message.Text.IndexOf("/run" + 4));
+            .Substring(message.Text.IndexOf(command) + command.Length);
+
+        if (string.IsNullOrEmpty(sourceCode))
+        {
+            return;
+        }
 
         try
         {
             byte[] compiledCode = this.compilerService.Compile(sourceCode);
             string result = this.compilerService.Execute(compiledCode);
+            StringBuilder messageTemplate = new StringBuilder();
+
+            messageTemplate.AppendLine(MessageTemplate.GetDecoratedMessage(
+                message: "Result:",
+                decoraterType: Models.DecoraterType.Bold));
+
+            messageTemplate.AppendLine(MessageTemplate.GetDecoratedMessage(
+                message: result,
+                decoraterType: Models.DecoraterType.Monospace));
 
             await this.telegramBotClient.SendTextMessageAsync(
                 chatId: message.From.Id,
-                text: $"<b>Result:\n{result}</b>",
+                text: messageTemplate.ToString(),
                 parseMode: ParseMode.Html);
         }
-        catch(CompileFailedException compileFailedException)
+        catch (CompileFailedException compileFailedException)
         {
             await this.telegramBotClient.SendTextMessageAsync(
                 chatId: message.From.Id,
-                text: compileFailedException.Message);
+                text: compileFailedException.Message,
+                parseMode: ParseMode.Html);
         }
     }
 
     private async Task HandleNotAvailableCommandAsync(Message message)
     {
+        string messageTemplate = MessageTemplate.GetDecoratedMessage(
+            message: @"Not available command provided.",
+            decoraterType: Models.DecoraterType.Bold);
+
         await this.telegramBotClient.SendTextMessageAsync(
             chatId: message.From.Id,
-            text: "Not available command provided.",
+            text: messageTemplate,
             parseMode: ParseMode.Html);
     }
 }
