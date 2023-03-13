@@ -14,6 +14,7 @@ public class UpdateHandler
     private readonly ITelegramBotClient telegramBotClient;
     private readonly ILogger<UpdateHandler> logger;
     private readonly ICompilerService compilerService;
+    private readonly long groupId;
 
     public UpdateHandler(
         ITelegramBotClient telegramBotClient,
@@ -23,6 +24,7 @@ public class UpdateHandler
         this.telegramBotClient = telegramBotClient;
         this.logger = logger;
         this.compilerService = compilerService;
+        this.groupId = long.Parse(Environment.GetEnvironmentVariable("GROUP_ID"));
     }
 
     public async Task UpdateHandlerAsync(Update update)
@@ -68,6 +70,13 @@ public class UpdateHandler
 
     private async Task HandleRunCommandAsync(Message message)
     {
+        long chatId = message.From.Id;
+
+        if(message.Chat.Type is ChatType.Group or ChatType.Supergroup)
+        {
+            chatId = this.groupId;
+        }
+
         string command = "/run";
 
         string sourceCode = message.Text
@@ -84,28 +93,35 @@ public class UpdateHandler
             string result = this.compilerService.Execute(compiledCode);
             string messageText = FormatResultMessage(result);
 
-            await SendMessageAsync(message.From.Id, messageText);
+            await SendMessageAsync(chatId, messageText);
         }
         catch (CompileFailedException compileFailedException)
         {
             string errorMessage = compileFailedException.Message;
-            await SendMessageAsync(message.From.Id, errorMessage);
+            await SendMessageAsync(chatId, errorMessage);
         }
         catch (TargetInvocationException targetInvocationException)
         {
             if (targetInvocationException.InnerException is Exception innerException)
             {
                 string errorMessage = FormatExceptionMessage(innerException);
-                await SendMessageAsync(message.From.Id, errorMessage);
+                await SendMessageAsync(chatId, errorMessage);
             }
         }
     }
 
     private async Task HandleNotAvailableCommandAsync(Message message)
     {
+        long chatId = message.From.Id;
+
+        if (message.Chat.Type is ChatType.Group or ChatType.Supergroup)
+        {
+            chatId = this.groupId;
+        }
+
         string notAvailableCommandMessage = FormatNotAvailableCommanMessage();
 
-        await SendMessageAsync(message.From.Id, notAvailableCommandMessage);
+        await SendMessageAsync(chatId, notAvailableCommandMessage);
     }
 
     private async Task SendMessageAsync(
