@@ -57,7 +57,7 @@ public class CompilerService : ICompilerService
         return peStream.ToArray();
     }
 
-    private static CSharpCompilation GenerateCode(string sourceCode)
+    private CSharpCompilation GenerateCode(string sourceCode)
     {
         var codeString = SourceText.From(sourceCode);
         
@@ -93,21 +93,13 @@ public class CompilerService : ICompilerService
     #endregion
 
     #region Run process
-    public string Execute(byte[] compiledAssembly)
+    public async Task<string> ExecuteAsync(byte[] compiledAssembly)
     {
-        var assemblyLoadContextWeakRef = LoadAndExecute(compiledAssembly, out string output);
-
-        for (var i = 0; i < 8 && assemblyLoadContextWeakRef.IsAlive; i++)
-        {
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-        }
-
-        return output;
+        return await LoadAndExecuteAsync(compiledAssembly);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static WeakReference LoadAndExecute(byte[] compiledAssembly, out string output)
+    private async Task<string> LoadAndExecuteAsync(byte[] compiledAssembly)
     {
         using var memoryStream = new MemoryStream(compiledAssembly);
         var assemblyLoadContext = new SimpleUnloadableAssemblyLoadContext();
@@ -117,18 +109,26 @@ public class CompilerService : ICompilerService
         using var streamWriter = new StreamWriter(outputStream);
         streamWriter.AutoFlush = true;
         var originalConsoleOut = Console.Out;
+        int timeoutMilliseconds = 5000;
 
         try
         {
             Console.SetOut(streamWriter);
 
-            if(entry is not null)
+            if (entry is not null)
             {
-                var args = entry.GetParameters().Length > 0 ? 
+                var args = entry.GetParameters().Length > 0 ?
                     new object[] { Array.Empty<string>() } :
                     default;
-                
-                entry.Invoke(null, args);
+
+                var task = Task.Run(() => entry.Invoke(null, args));
+
+                if (await Task.WhenAny(task, Task.Delay(timeoutMilliseconds)) != task)
+                {
+                    throw new TimeoutException($"The assembly execution timed out after {timeoutMilliseconds} ms.");
+                }
+
+                await task;
             }
         }
         finally
@@ -136,10 +136,24 @@ public class CompilerService : ICompilerService
             Console.SetOut(originalConsoleOut);
         }
 
-        output = Encoding.UTF8.GetString(outputStream.ToArray());
+        string output = Encoding.UTF8.GetString(outputStream.ToArray());
         assemblyLoadContext.Unload();
 
-        return new WeakReference(assemblyLoadContext);
+        CollectWeakReferences(assemblyLoadContext);
+
+        return output;
+    }
+
+    private void CollectWeakReferences(
+        SimpleUnloadableAssemblyLoadContext assemblyLoadContext)
+    {
+        var assemblyLoadContextWeakRef = new WeakReference(assemblyLoadContext);
+
+        for (var i = 0; i < 8 && assemblyLoadContextWeakRef.IsAlive; i++)
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+        }
     }
     #endregion
 }

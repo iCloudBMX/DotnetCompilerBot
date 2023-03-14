@@ -3,5 +3,5 @@
 public interface ICompilerService
 {
     byte[] Compile(string sourceCode);
-    string Execute(byte[] compiledAssembly);
+    Task<string> ExecuteAsync(byte[] compiledAssembly);
 }

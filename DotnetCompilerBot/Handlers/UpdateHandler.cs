@@ -90,7 +90,7 @@ public class UpdateHandler
         try
         {
             byte[] compiledCode = this.compilerService.Compile(sourceCode);
-            string result = this.compilerService.Execute(compiledCode);
+            string result = await this.compilerService.ExecuteAsync(compiledCode);
             string messageText = FormatResultMessage(result);
 
             await SendMessageAsync(chatId, messageText);
